@@ -124,4 +124,5 @@ checks that the two still match.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE), © 2026 Okinawa Institute of Science and Technology School Corporation (OIST).
+Written by Fedor Gagarin.
