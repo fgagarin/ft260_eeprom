@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uvx ruff check
+      - run: uvx ruff format --check
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv build
+      - name: Smoke test the installed command
+        run: |
+          uv venv
+          uv pip install dist/*.whl
+          .venv/bin/ft260-eeprom --version
+          .venv/bin/ft260-eeprom gen-serial BF01xxxxxx
+          .venv/bin/ft260-eeprom info --builtin
+          .venv/bin/ft260-eeprom write --builtin --serial-mask BF01xxxxxx --manufacturer OIST --product Test -n
+      - name: Built-in image matches the FT_Prog dump
+        run: |
+          .venv/bin/python -c "
+          import pathlib, ft260_eeprom as m
+          assert m.builtin_image()[0] == pathlib.Path('ft260_default.bin').read_bytes()
+          "

@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.14"
+# requires-python = ">=3.11"
 # dependencies = [
 #     "click>=8.2",
 #     "hidapi>=0.14",
@@ -22,19 +22,22 @@ structure and refuses to write when it cannot:
 * VID/PID is the little-endian pair the device enumerates with;
 * the checksum is FTDI's 16-bit xor/rotate sum, located by trying every position.
 
+Installed from PyPI it is the `ft260-eeprom` command; from a source checkout,
+`./ft260_eeprom.py` runs it through uv with the dependencies declared above.
+
 Run `info` first and check that it found every field you want to change.
 
 A blank EEPROM has nothing to edit.  `write --builtin` starts from an image
 FT_Prog wrote with default settings (serial number enabled, 256-byte EEPROM
 with one-byte addresses), stored in this script with its field map:
-  ./ft260_eeprom.py write --builtin --serial-mask BF01xxxxxx \
+  ft260-eeprom write --builtin --serial-mask BF01xxxxxx \
       --manufacturer OIST --product "Biofactory bioreactor"
 then replug the board.  For other settings (pins, power), program one board
 with FT_Prog, `dump -o reference.bin` it and use `write --template reference.bin`.
 
 Linux access: the `hid` module talks libusb, so it needs write access to the
 USB device node /dev/bus/usb/BBB/DDD (it detaches hid-ft260 while open).  Debian
-creates those nodes as root:root 0664; `./ft260_eeprom.py udev-rule` installs
+creates those nodes as root:root 0664; `ft260-eeprom udev-rule` installs
 /etc/udev/rules.d/60-ft260.rules that gives them to group plugdev (via sudo).
 """
 
@@ -59,6 +62,8 @@ from typing import Self
 import click
 import hid
 from nanoid import generate as nanoid_generate
+
+__version__ = "0.1.0"
 
 FT260_VID = 0x0403
 FT260_PID = 0x6030
@@ -668,7 +673,8 @@ def in_group(user: str, group: str) -> bool:
 
 def self_command(cfg: Config, *args: str) -> str:
     """How to run this script again with the same --vid/--pid."""
-    cmd = [sys.argv[0]]
+    argv0 = sys.argv[0]
+    cmd = [argv0 if argv0.endswith(".py") else Path(argv0).name]
     if (cfg.vid, cfg.pid) != (FT260_VID, FT260_PID):
         cmd += ["--vid", f"0x{cfg.vid:04X}", "--pid", f"0x{cfg.pid:04X}"]
     return shlex.join([*cmd, *args])
@@ -743,6 +749,7 @@ def program(ee: Eeprom, old: bytes, new: bytes, yes: bool) -> None:
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"], "show_default": True})
+@click.version_option(__version__)
 @click.option("--vid", type=HEX16, default="0x0403", help="VID the FT260 currently enumerates with.")
 @click.option("--pid", type=HEX16, default="0x6030", help="PID the FT260 currently enumerates with.")
 @click.option("--path", help="Device path of the I2C interface (see `list`), for several FT260.")
