@@ -11,13 +11,13 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Fedor Gagarin" }]
 requires-python = ">=3.11"
-# Keep in sync with the inline script metadata at the top of ft260_eeprom.py.
+# Keep in sync with the inline script metadata at the top of ft260_eeprom.py and ft260_i2c_scan.py.
 dependencies = [
     "click>=8.2",
     "hidapi>=0.14",
     "nanoid>=2.0",
 ]
-keywords = ["ft260", "ftdi", "eeprom", "usb", "hid", "i2c", "serial-number"]
+keywords = ["ft260", "ftdi", "eeprom", "usb", "hid", "i2c", "i2c-scanner", "tca9548a", "serial-number"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -36,15 +36,16 @@ Changelog = "https://github.com/fgagarin/ft260_eeprom/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ft260-eeprom = "ft260_eeprom:cli"
+ft260-i2c-scan = "ft260_i2c_scan:cli"
 
 [tool.hatch.version]
 path = "ft260_eeprom.py"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["ft260_eeprom.py"]
+only-include = ["ft260_eeprom.py", "ft260_i2c_scan.py"]
 
 [tool.hatch.build.targets.sdist]
-include = ["ft260_eeprom.py", "ft260_default.bin", "README.md", "CHANGELOG.md", "LICENSE"]
+include = ["ft260_eeprom.py", "ft260_i2c_scan.py", "ft260_default.bin", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [tool.ruff]
 line-length = 120

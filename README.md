@@ -89,6 +89,51 @@ To use other settings, such as pin functions or power options, program one board
 `--path` (from `list`) picks one. `--eeprom-addr`, `--addr-width`, `--size` and `--page-size`
 describe the EEPROM. Run `ft260-eeprom <command> --help` for details.
 
+## I2C scanner
+
+`ft260-i2c-scan` (`./ft260_i2c_scan.py` from a checkout) maps the devices on the I2C bus behind the
+FT260, like `i2cdetect`. Each address gets a one-byte write and a one-byte read, and the map shows
+which of them the device ACKed:
+
+```
+RW read and write ACK   R- read only   -W write only   -- no answer   !! bus error, see below the map   == answers on the main bus too
+
+Main bus, multiplexer channels off
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:                         -- -- -- -- -- -- -- --
+...
+50: RW -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+...
+70: RW -- -- -- -- -- -- --
+  0x50 RW, 0x70 RW (TCA9548A)
+```
+
+If a TCA9548A multiplexer answers at 0x70, the main bus is scanned with all its channels off, then
+each channel is switched on alone and scanned. A channel map shows the devices behind that channel;
+addresses that answer on the main bus too are marked `==`. A summary lists the devices per channel,
+and all channels are switched off at the end.
+
+```bash
+ft260-i2c-scan                     # main bus and all 8 multiplexer channels
+ft260-i2c-scan -c 0 -c 3           # only channels 0 and 3
+ft260-i2c-scan --probe read        # read probes only, writes nothing to the devices
+ft260-i2c-scan --mux-addr 0x74     # multiplexer with A2 strapped high
+ft260-i2c-scan --no-mux --first 0 --last 0x7f
+```
+
+The FT260 cannot send the zero-length write (SMBus quick command) that `i2cdetect` uses, so the write
+probe carries one byte, 0x00 by default (`--write-byte`). A device that ACKs receives it: for most
+chips that only sets the register pointer, but a PCF8574-style port expander drives its outputs to
+it. Use `--probe read` on boards where that matters. A device that ACKs its address but NACKs the
+byte, as some sensors do with an unknown command, counts as answering the write. The multiplexer's
+own address is never probed, because a byte written to it selects the channels.
+
+`!!` marks an address where the FT260 reported another error: arbitration lost, bus busy, a stuck
+line. The FT260 status bits are listed under the map and in the summary, for example
+`0x40 !! read: status 0x12 (error, arbitration lost)`.
+
+`--vid`, `--pid`, `--path` and `--i2c-khz` work as in `ft260-eeprom`.
+
 ## How it works
 
 FTDI does not publish the byte layout of the configuration image. The tool locates the fields by

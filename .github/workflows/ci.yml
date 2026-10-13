@@ -33,6 +33,7 @@ jobs:
           .venv/bin/ft260-eeprom gen-serial BF01xxxxxx
           .venv/bin/ft260-eeprom info --builtin
           .venv/bin/ft260-eeprom write --builtin --serial-mask BF01xxxxxx --manufacturer OIST --product Test -n
+          .venv/bin/ft260-i2c-scan --help
       - name: Built-in image matches the FT_Prog dump
         run: |
           .venv/bin/python -c "

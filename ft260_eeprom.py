@@ -87,6 +87,8 @@ I2C_START_AND_STOP = 0x06
 
 STATUS_BUSY = 0x01
 STATUS_ERROR = 0x02
+STATUS_ADDRESS_NACK = 0x04
+STATUS_DATA_NACK = 0x08
 STATUS_BITS = {
     0x01: "controller busy",
     0x02: "error",
@@ -116,10 +118,14 @@ class OpenError(FT260Error):
     pass
 
 
+def describe_status(status: int) -> str:
+    names = ", ".join(n for bit, n in STATUS_BITS.items() if status & bit)
+    return f"status 0x{status:02X} ({names})"
+
+
 class I2CError(FT260Error):
     def __init__(self, status: int):
-        names = ", ".join(n for bit, n in STATUS_BITS.items() if status & bit)
-        super().__init__(f"I2C transfer failed, status 0x{status:02X} ({names})")
+        super().__init__(f"I2C transfer failed, {describe_status(status)}")
         self.status = status
 
 
@@ -152,7 +158,10 @@ class FT260:
 
     def _send(self, report: list[int]) -> None:
         if self._dev.write(report) < 0:
-            raise FT260Error(f"HID write failed: {self._dev.error()}")
+            raise FT260Error(
+                f"HID write of report 0x{report[0]:02X} failed ({self._dev.error()}); "
+                "the FT260 stopped accepting requests, replug it"
+            )
 
     def reset(self) -> None:
         self._dev.send_feature_report([REPORT_SYSTEM_SETTING, SYS_I2C_RESET])
@@ -193,6 +202,32 @@ class FT260:
                 out += bytes(report[2 : 2 + report[1]])
         self.wait()
         return bytes(out)
+
+    def probe(self, addr: int, write: bytes | None = None) -> bool:
+        """Address `addr` with a 1-byte read, or a write of `write`; True if it ACKs.
+
+        The FT260 cannot do zero-length writes (SMBus quick command), so a write
+        probe has to send data, which the device takes if it ACKs.  A NACK on
+        that data still counts: the device ACKed its address and only refused
+        the byte.  Other bus errors raise I2CError.
+        """
+        if write == b"":
+            raise ValueError("the FT260 cannot do zero-length writes")
+        try:
+            if write is None:
+                self._send([REPORT_I2C_READ_REQUEST, addr, I2C_START_AND_STOP, 1, 0])
+                self.wait()
+                self._dev.read(64, 100)  # the byte read, discarded
+            else:
+                self.write(addr, write)
+        except I2CError as e:
+            if e.status & STATUS_ADDRESS_NACK:
+                self._drain()
+                return False
+            if write is not None and e.status & STATUS_DATA_NACK:
+                return True
+            raise
+        return True
 
 
 @dataclass
@@ -590,24 +625,31 @@ IMAGE_PATH = click.Path(exists=True, dir_okay=False, path_type=Path)
 
 
 @dataclass
-class Config:
+class DeviceConfig:
     vid: int
     pid: int
     path: str | None
+    i2c_khz: int
+
+
+@dataclass
+class Config(DeviceConfig):
     eeprom_addr: int
     addr_width: int
     size: int
     page_size: int
-    i2c_khz: int
 
 
-def find_device(cfg: Config) -> dict:
+def find_device(cfg: DeviceConfig) -> dict:
     if cfg.path:
         devs = [d for d in hid.enumerate() if d["path"].decode() == cfg.path]
     else:
         devs = [d for d in hid.enumerate(cfg.vid, cfg.pid) if d["interface_number"] in (I2C_INTERFACE, -1)]
     if not devs:
-        raise FT260Error(f"no FT260 I2C interface found ({cfg.vid:04X}:{cfg.pid:04X}); try `list`, --vid/--pid")
+        raise FT260Error(
+            f"no FT260 I2C interface found ({cfg.vid:04X}:{cfg.pid:04X}); try `{self_command(cfg, 'list')}`, "
+            "--vid/--pid"
+        )
     if len(devs) > 1:
         paths = "\n  ".join(d["path"].decode() for d in devs)
         raise FT260Error(f"several FT260 found, choose one with --path:\n  {paths}")
@@ -615,7 +657,7 @@ def find_device(cfg: Config) -> dict:
 
 
 @contextmanager
-def open_eeprom(cfg: Config) -> Iterator[tuple[dict, Eeprom]]:
+def open_bus(cfg: DeviceConfig) -> Iterator[tuple[dict, FT260]]:
     dev = find_device(cfg)
     try:
         bus = FT260(dev["path"], cfg.i2c_khz)
@@ -623,6 +665,12 @@ def open_eeprom(cfg: Config) -> Iterator[tuple[dict, Eeprom]]:
         e.message += "\n\n" + open_failure_hint(dev["path"].decode(), cfg)
         raise
     with bus:
+        yield dev, bus
+
+
+@contextmanager
+def open_eeprom(cfg: Config) -> Iterator[tuple[dict, Eeprom]]:
+    with open_bus(cfg) as (dev, bus):
         yield dev, Eeprom(bus, cfg.eeprom_addr, cfg.addr_width, cfg.page_size)
 
 
@@ -671,16 +719,16 @@ def in_group(user: str, group: str) -> bool:
     return gr.gr_gid in os.getgrouplist(user, pwd.getpwnam(user).pw_gid)
 
 
-def self_command(cfg: Config, *args: str) -> str:
-    """How to run this script again with the same --vid/--pid."""
+def self_command(cfg: DeviceConfig, *args: str) -> str:
+    """How to run ft260-eeprom (also from ft260-i2c-scan) with the same --vid/--pid."""
     argv0 = sys.argv[0]
-    cmd = [argv0 if argv0.endswith(".py") else Path(argv0).name]
+    cmd = [os.path.join(os.path.dirname(argv0), "ft260_eeprom.py") if argv0.endswith(".py") else "ft260-eeprom"]
     if (cfg.vid, cfg.pid) != (FT260_VID, FT260_PID):
         cmd += ["--vid", f"0x{cfg.vid:04X}", "--pid", f"0x{cfg.pid:04X}"]
     return shlex.join([*cmd, *args])
 
 
-def open_failure_hint(path: str, cfg: Config) -> str:
+def open_failure_hint(path: str, cfg: DeviceConfig) -> str:
     node = usb_node(path)
     if node is None or not node.exists():
         return f"Could not find the device node of {path}; check `lsusb` and `{self_command(cfg, 'list')}`."
