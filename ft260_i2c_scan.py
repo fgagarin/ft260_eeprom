@@ -36,9 +36,9 @@ from dataclasses import dataclass, replace
 import click
 
 from ft260_eeprom import (
+    FT260,
     HEX8,
     HEX16,
-    FT260,
     DeviceConfig,
     FT260Error,
     I2CError,
