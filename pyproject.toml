@@ -49,3 +49,12 @@ include = ["ft260_eeprom.py", "ft260_i2c_scan.py", "ft260_default.bin", "README.
 
 [tool.ruff]
 line-length = 120
+
+# `make release` runs git-changelog with these settings. Commit messages follow
+# Conventional Commits (feat:, fix:, ...): they pick the sections and the version bump.
+[tool.git-changelog]
+convention = "conventional"
+template = "keepachangelog"
+provider = "github"
+output = "CHANGELOG.md"
+in-place = true

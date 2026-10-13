@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.1.0 — 2026-10-12
+Entries after v0.1.0 are generated from commit messages by
+[git-changelog](https://github.com/pawamoy/git-changelog) during `make release`.
+
+<!-- insertion marker -->
+## [v0.1.0](https://github.com/fgagarin/ft260_eeprom/releases/tag/v0.1.0) - 2026-10-12
 
 First release.
 

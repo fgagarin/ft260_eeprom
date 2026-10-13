@@ -167,6 +167,21 @@ checks that the two still match.
   `--template` with a dump of a board programmed by FT_Prog.
 - eFUSE is not supported.
 
+## Releasing
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:` and
+`fix:` commits go into the changelog and choose the version bump, `chore:`, `ci:`, `docs:` and the
+like do not. To release from a clean `main`:
+
+```bash
+make next-version         # what the release will be called
+make release              # or BUMP=patch|minor|major|X.Y.Z
+```
+
+`release` runs ruff, sets `__version__`, adds the new version to `CHANGELOG.md` with
+[git-changelog](https://github.com/pawamoy/git-changelog), commits and tags `vX.Y.Z`. It prints the
+commands that push the tag and create the GitHub release, which publishes to PyPI.
+
 ## License
 
 [MIT](LICENSE), © 2026 Okinawa Institute of Science and Technology School Corporation (OIST).
